@@ -46,3 +46,4 @@ const userModel = mongoose.model("user", userSchema)
 module.exports = userModel
 
 //debug-1. when using asyn then donot use next() 2. Remember (password,this.password) this.password is read from db
+//Here comparePassword is userdefined

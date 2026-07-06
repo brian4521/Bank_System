@@ -9,7 +9,7 @@ const jwt = require("jsonwebtoken")
  * - user register controller
  * - post /api/auth/register
  */
-async function userRegisterController(req,res){
+async function userRegisterController(req,res){   
   const {email,password,name} = req.body
 
   const isexists = await userModel.findOne({
@@ -31,7 +31,7 @@ async function userRegisterController(req,res){
     expiresIn:"3d"
   })
 
-  res.cookie("token",token)
+  res.cookie("token",token) 
 
   res.status(201).json({
     user:{
