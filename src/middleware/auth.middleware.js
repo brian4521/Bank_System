@@ -18,6 +18,7 @@ async function authMiddleware(req,res,next){
     const user = await userModel.findById(decoded.userId)
 
     req.user = user
+    //it contains the user id that is matched with model userId
     return next()
 
   }catch(error){
