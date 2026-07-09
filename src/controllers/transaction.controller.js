@@ -1,5 +1,8 @@
 const transactionModel = require('../models/transaction.model');
 const accountModel = require('../models/account.model');
+const ledgerModel = require('../models/ledger.model');
+const emailService = require('../services/email.service');
+const mongoose = require('mongoose');
 
 
 
@@ -58,7 +61,94 @@ async function createTransaction(req,res){
         transaction:isTransactionAlreadyExists
       })
     }
+    if(isTransactionAlreadyExists.status === "reversed"){
+      return res.status(400).json({
+        message:"Transaction was reversed ",
+        transaction:isTransactionAlreadyExists
+      })
+    }
   }
 
+  /**
+   * check account status
+   */
+  if(fromUserAccount.status !== "active" || toUserAccount.status !== "active"){
+    return res.status(400).json({
+      message:"fromAccount or toAccount is not active"
+    })
+  }
+
+
+  /**
+   * -derive sender ledger balance and check if sufficient funds are available
+   */
+
+  const balance = await fromUserAccount.getBalance();
+
+  if(balance < amount){
+    return res.status(400).json({
+      message:`Insufficient funds in fromAccount. Current balance is ${balance}. Requested amount is ${amount}`
+    })
+  }
+
+  /**
+   * - create transaction (pending)
+   */
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  const transaction = await transactionModel.create({
+    fromAccount:fromAccount,
+    toAccount:toAccount,
+    amount:amount,
+    idempotencyKey:idempotencyKey,
+    status:"pending"
+  },{session:session})
+
+
+  const debitLedgerEntry = await ledgerModel.create({
+    account:fromAccount,
+    amount:amount,
+    transaction:transaction._id,
+    type:"debit"
+  },{session:session})
+
+  const creditLedgerEntry = await ledgerModel.create({
+    account:toAccount,
+    amount:amount,
+    transaction:transaction._id,
+    type:"credit"
+  },{session:session})
+
+  transaction.status = "completed"
+  await transaction.save({session:session})
+
+  await session.commitTransaction();
+  session.endSession();
+
+  /**
+   * - send email notification
+   */
+
+  await emailService.sendTransactionEmail(req.user.email, req.user.name, amount, toAccount);
+
+  return res.status(201).json({
+    message:"Transaction completed successfully",
+    transaction:transaction
+  })
+
+
 }
+
+module.exports ={
+  createTransaction
+}
+
+
+
+
 //return res.status(201).json({ should be included so that no other response below this line is executed and the response is sent to the client
+
+//since action is taken by from account so we send email to from account user. 
+// note- req.user.email and req.user.name are retrieved from the auth middleware which is executed before this controller function. The auth middleware decodes the JWT token and attaches the user information to the req object.
